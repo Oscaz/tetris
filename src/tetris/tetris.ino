@@ -1,4 +1,11 @@
-#include <MicroView.h>
+#include <SPI.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1305.h>
+
+#define OLED_RESET 9
+Adafruit_SSD1305 display(OLED_RESET);
+
 // 7, 4, 17
 // 7 -> pieces
 // 4 -> variations (up right down left)
@@ -67,7 +74,7 @@ boolean pieces[7][4][17] = {{
     false, false, false, false,
     false, false, true, false,
     false, false, true, false,
-    false, false, true, true, 
+    false, false, true, true,
     },
     {true,
     false, false, false, false,
@@ -146,8 +153,11 @@ boolean pieces[7][4][17] = {{
 boolean board[200];
 boolean pieceBoard[200];
 
-byte gameSpeedCount = 5;
-byte gameSpeedSet = 5;
+byte gameSpeedCount = 20;
+byte gameSpeedSet = 20;
+
+byte joystickInputCount = 4;
+byte joystickInputSet = 4;
 
 int currentScore = 0;
 
@@ -163,32 +173,34 @@ byte x_pin = 0;
 byte y_pin = 1;
 
 void setup() {
-  uView.begin();
+  display.begin(0x3C);
   for (short s = 0; s < 200; s++) board[s] = false;
   pinMode(sw_pin, INPUT);
   digitalWrite(sw_pin, HIGH);
 }
 
 void loop() {
-  if (currentPiece == 7) {
-    currentPiece = nextPiece;
-    nextPiece = random(7);
-    currentVariation = 0;
-    currentX = 3; // 1 - 7
-    currentY = 1; // 1 - 17
-  }
-  // Add way to detect joystick pressed and call methods accordingly
-  checkPiece();
-  drawBoard();
-  delay(200);
   if (gameSpeedCount == 0) {
+    if (currentPiece == 7) {
+      currentPiece = nextPiece;
+      nextPiece = random(7);
+      currentVariation = 0;
+      currentX = 3; // 1 - 7
+      currentY = 1; // 1 - 17
+    }
+    checkPiece();
+    drawBoard(4);
     down();
     gameSpeedCount = gameSpeedSet;
   } else gameSpeedCount--;
-  if (analogRead(x_pin) < 200) right();
-  if (analogRead(x_pin) > 800) left();
-  if (analogRead(y_pin) < 200) down();
-  if (analogRead(y_pin) > 800) rotate();
+  if (joystickInputCount == 0) {
+    if (analogRead(x_pin) < 200) right();
+    if (analogRead(x_pin) > 800) left();
+    if (analogRead(y_pin) < 200) down();
+    if (analogRead(y_pin) > 800) rotate();
+    joystickInputCount = joystickInputSet;
+  } else joystickInputCount--;
+  delay(50);
 }
 
 void checkLine() {
@@ -199,7 +211,7 @@ void checkLine() {
         boolean newBoard[200];
         for (byte d = 0; d < 9; d++) board[b * 10 + d] = false;
         addScore(1);
-        for (short s = 0; s < 200; s++) { 
+        for (short s = 0; s < 200; s++) {
           newBoard[s] = false;
           if (board[s]) newBoard[s + 10] = true;
         }
@@ -210,59 +222,29 @@ void checkLine() {
   }
 }
 
-// 2 TIMES SCALE xy (40-20)
-// pixel(x*2,y*2)
-// pixel (x*2+1,y*2)
-// pixel (x*2, y*2+1)
-// pixel (x*2+1, y*2+1)
-
-// 3 TIMES SCALE xy (60-30)
-// pixel (x*3, y*3)
-// pixel (x*3+1, y*3)
-// pixel (x*3+2, y*3)
-// pixel (x*3, y*3+1)
-// pixel (x*3+1, y*3+1)
-// pixel (x*3+2, y*3+1)
-// pixel (x*3, y*3+2)
-// pixel (x*3+1, y*3+2)
-// pixel (x*3+2, y*3+2)
-
-// 4 TIMES SCALE xy (80-40)
-// pixel(x*4,y*4)
-// pixel(x*4+1, y*4)
-// pixel(x*4+2, y*4)
-// pixel(x*4+3, y*4)
-// pixel(x*4,y*4+1)
-// pixel(x*4+1, y*4+1)
-// pixel(x*4+2, y*4+1)
-// pixel(x*4+3, y*4+1)
-// pixel(x*4,y*4+2)
-// pixel(x*4+1, y*4+2)
-// pixel(x*4+2, y*4+2)
-// pixel(x*4+3, y*4+2)
-// pixel(x*4,y*4+3)
-// pixel(x*4+1, y*4+3)
-// pixel(x*4+2, y*4+3)
-// pixel(x*4+3, y*4+3)
-
-void drawBoard() {
-  uView.clear(PAGE);
-  for (int i = 0; i < 20; i++) {
-    for (int j = 0; j < 10; j++) {
+void drawBoard(byte scaleFactor) {
+  display.clearDisplay();
+  display.setRotation(1);
+  for (byte i = 0; i < 20; i++) {
+    for (byte j = 0; j < 10; j++) {
       if (pieceBoard[(i * 10) + j] == true) {
-        uView.pixel(j, i);
+        for (byte b = 0; b < scaleFactor; b++) {
+          for (byte c = 0; c < scaleFactor; c++) {
+            display.drawPixel(j*scaleFactor+c,i*scaleFactor+b,WHITE);
+          }
+        }
       }
     }
   }
-  uView.display();
+  display.display();
 }
 
 void drawPieceBoard() {
-  for (int i = 0; i < 200; i++) {
+  for (short i = 0; i < 200; i++) {
     pieceBoard[i] = board[i];
   }
-  for (int i = 0; i < 4; i++) {
-    for (int j = 0; j < 4; j++) {
+  for (byte i = 0; i < 4; i++) {
+    for (byte j = 0; j < 4; j++) {
       if (pieces[currentPiece][currentVariation][i * 4 + j + 1]) {
         pieceBoard[(currentY * 10) + currentX + (i * 10) + j] = true;
       }
@@ -274,8 +256,8 @@ short pieceIndexes[4] = {-1,-1,-1,-1};
 
 void setPieceIndexes() {
   for (byte b = 0; b < 4; b++) pieceIndexes[b] = -1;
-  for (int i = 0; i < 4; i++) {
-    for (int j = 0; j < 4; j++) {
+  for (byte i = 0; i < 4; i++) {
+    for (byte j = 0; j < 4; j++) {
       if (pieces[currentPiece][currentVariation][i * 4 + j + 1]) {
         for (byte t = 0; t < 4; t++) {
           if (pieceIndexes[t] == -1) { pieceIndexes[t] = (currentY * 10) + currentX + (i * 10) + j; break; }
@@ -290,8 +272,8 @@ void checkPiece() {
   setPieceIndexes();
   for (byte b = 0; b < 4; b++) {
     if (board[pieceIndexes[b] + 10]) {
-      stopPiece(); 
-      for (int i = 0; i < 200; i++) {
+      stopPiece();
+      for (short i = 0; i < 200; i++) {
         pieceBoard[i] = board[i];
       }
       return;
@@ -308,11 +290,11 @@ void stopPiece() {
 
 void rotate() {
   byte localVariation = currentVariation;
-  for (int i = 0; i < 4; i++) {
+  for (byte i = 0; i < 4; i++) {
     if (localVariation == 3) localVariation = 0;
     else localVariation++;
     if (!pieces[currentPiece][localVariation][0]) continue;
-    else { 
+    else {
       if (canRotate(localVariation)) {
         currentVariation = localVariation;
         return;
@@ -321,13 +303,13 @@ void rotate() {
   }
 }
 
-boolean canRotate(int variation) {
+boolean canRotate(byte variation) {
   boolean localBoard[200];
-  for (int i = 0; i < 200; i++) {
+  for (short i = 0; i < 200; i++) {
     localBoard[i] = board[i];
   }
-  for (int i = 0; i < 4; i++) {
-    for (int j = 0; j < 4; j++) {
+  for (byte i = 0; i < 4; i++) {
+    for (byte j = 0; j < 4; j++) {
       if (pieces[currentPiece][variation][i * 4 + j + 1]) {
         short index = (currentY * 10) + currentX + (i * 10) + j;
         if (board[index]) return false;
@@ -353,5 +335,5 @@ void right() {
 }
 
 void addScore(int score) {
-  currentScore += score;  
+  currentScore += score;
 }
